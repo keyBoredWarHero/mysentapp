@@ -5,7 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
 # Load Data
-s = pd.read_csv('C:/Users/JackSokolis/Downloads/social_media_usage.csv')
+s = pd.read_csv('./social_media_usage.csv')
 
 # Data Cleaning
 def clean_sm(x):
