@@ -1,124 +1,96 @@
 import pandas as pd
-import streamlit as st
-
-
-st.markdown("# welcome to my app")
-
-
-
-s = pd.read_csv('downloads/social_media_usage.csv')
-
-
-print(s.head)
-
-
-s.isnull().sum()
-
 import numpy as np
-
-def clean_sm(x):
-    return np.where(x == 1, 1, 0)
-    toy = { 
-    'd': [4,1,0],
-    'e': [1,1,3]
-}
-toys = pd.DataFrame(toy)
-
-toys
-
-toys.applymap(clean_sm)
-
-ss = s[[
-    'web1h',  
-    'income', 
-    'educ2', 
-    'par',  
-    'marital',  
-    'gender',  
-    'age' ]]
-
-ss.rename(columns={'web1h': 'sm_li'}, inplace=True) 
-
-ss['sm_li'] = clean_sm(ss['sm_li'])
-
-
-ss = ss[
-    (ss['income'] <= 9) & 
-    (ss['educ2'] <= 8) & 
-    (ss['age'] <= 98)
-].dropna()
-
-ss['parent'] = clean_sm(ss['par'])
-ss['married'] = clean_sm(ss['marital'])
-ss['female'] = clean_sm(ss['gender'] == 2)
-
-ss = ss[['sm_li', 'income', 'educ2', 'parent', 'married', 'female', 'age']]
-
-
-ss
-
-
-ss['sm_li'].sum()
-
-import altair as alt
-
-alt.Chart(ss.groupby(["educ2", "female"], as_index=False)["sm_li"].mean()).\
-mark_circle().\
-encode(x="educ2",
-      y="sm_li",
-      color="female:N")
-
-
-y = ss["sm_li"]
-X = ss[["age", "income", "female", "educ2", "parent", "married"]]
-
+import streamlit as st
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
 
+# Load Data
+s = pd.read_csv('C:/Users/JackSokolis/Downloads/social_media_usage.csv')
 
-X_train, X_test, y_train, y_test = train_test_split(X.values,
-                                                    y,
-                                                    stratify=y,       
-                                                    test_size=0.2,    
-                                                    random_state=555)
+# Data Cleaning
+def clean_sm(x):
+    return np.where(x == 1, 1, 0)
 
+s['web1h'] = clean_sm(s['web1h'])
+ss = s[
+    ['web1h', 'income', 'educ2', 'par', 'marital', 'gender', 'age']
+].dropna()
 
-lr = LogisticRegression()
+ss = ss[(ss['income'] <= 9) & (ss['educ2'] <= 8) & (ss['age'] <= 98)]
 
+ss['parent'] = clean_sm(ss['par'])
+ss['married'] = np.where(ss['marital'] == 1, 1, 0)  # Encode marital status as binary
+ss['female'] = clean_sm(ss['gender'] == 2)
+
+ss.rename(columns={'web1h': 'sm_li'}, inplace=True)
+ss = ss[['sm_li', 'income', 'educ2', 'parent', 'married', 'female', 'age']]
+
+# Prepare Data for Modeling
+y = ss["sm_li"]
+X = ss[["income", "educ2", "female", "married",]]
+
+X_train, X_test, y_train, y_test = train_test_split(X.values, y, stratify=y, test_size=0.2, random_state=555)
+
+lr = LogisticRegression(class_weight='balanced')
 lr.fit(X_train, y_train)
 
+# Streamlit App
+st.title("LinkedIn User Prediction")
 
-y_pred = lr.predict(X_test)
+st.markdown("### Enter Your Information Below")
+
+# Dictionaries for dropdown labels
+income_labels = {
+    1: "Less than $10,000",
+    2: "$10,000 to under $20,000",
+    3: "$20,000 to under $30,000",
+    4: "$30,000 to under $40,000",
+    5: "$40,000 to under $50,000",
+    6: "$50,000 to under $75,000",
+    7: "$75,000 to under $100,000",
+    8: "$100,000 to under $150,000",
+    9: "$150,000 or more",
+}
+
+educ2_labels = {
+    1: "Less than high school (Grades 1-8 or no formal schooling)",
+    2: "High school incomplete (Grades 9-11 or Grade 12 with NO diploma)",
+    3: "High school graduate (Grade 12 with diploma or GED certificate)",
+    4: "Some college, no degree (includes some community college)",
+    5: "Two-year associate degree from a college or university",
+    6: "Four-year college or university degree/Bachelor’s degree",
+    7: "Some postgraduate or professional schooling, no postgraduate degree",
+    8: "Postgraduate or professional degree (e.g., MA, MS, PhD, MD, JD)",
+}
 
 
-pd.DataFrame(confusion_matrix(y_test, y_pred),
-            columns=["Predicted negative", "Predicted positive"],
-            index=["Actual negative","Actual positive"]).style.background_gradient(cmap="PiYG")
 
-34/84
-
-34/61
-
-
-print(classification_report(y_test, y_pred))
+# User Input
+income = st.selectbox("Income Level (household)", options=list(income_labels.keys()), format_func=lambda x: income_labels[x])
+education = st.selectbox("Highest level of school/degree completed", options=list(educ2_labels.keys()), format_func=lambda x: educ2_labels[x])
+gender = st.radio("Gender", ("Male", "Female"))
+married_status = st.radio("Are you married?", ("Yes", "No"))
 
 
 
-newdata = pd.DataFrame({
-    "age": [42, 82],
-    "educ2": [7, 7],
-    "income": [8, 8],
-    "par": [0, 0],
-    "married": [1,1],
-    "female": [0,0]
+# Convert Input to Features
+female = 1 if gender == "Female" else 0
+married = 1 if married_status == "Yes" else 0
+
+user_data = pd.DataFrame({
+    "income": [income],
+    "educ2": [education],
+    "female": [female],
+    "married": [married],
 })
 
-newdata
+# Predict LinkedIn User
+if st.button("Predict"):
+    prediction = lr.predict(user_data)[0]
+    probability = lr.predict_proba(user_data)[0][1]  # Probability of being a LinkedIn user
 
-
-newdata["prediction_sm_li"] = lr.predict(newdata)
-
-
-newdata
+    st.markdown(f"### Prediction Probability: {probability:.2f}")
+    if prediction == 1:
+        st.success("You are likely a LinkedIn user!")
+    else:
+        st.warning("You are not likely a LinkedIn user.")
